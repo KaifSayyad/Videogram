@@ -1,83 +1,61 @@
 const Kafka = require("node-rdkafka");
 const { spawn } = require("child_process");
+const ffmpegPath = require("ffmpeg-static");
 
-const TOPIC_NAME = "demo_topic";
+const TOPIC_NAME_CONSUMER_1 = "consumer1_topic";
+const TOPIC_NAME_CONSUMER_2 = "consumer2_topic";
 
-// Kafka producer configuration
-const producer = new Kafka.Producer({
-  "metadata.broker.list": "kafka-17907454-v1deo-gram.a.aivencloud.com:26681",
-  "dr_cb": true, // Enable delivery report callback
+const consumer1 = new Kafka.KafkaConsumer({
+  "group.id": "my-group-1",
+  "metadata.broker.list": "kafka-broker:9092",
   "security.protocol": "ssl",
   "ssl.key.location": "service.key",
   "ssl.certificate.location": "service.cert",
   "ssl.ca.location": "ca.pem",
 });
 
-// Connect the producer to the Kafka cluster
-producer.connect();
+consumer1.connect();
 
-// Specify the full path to the ffmpeg executable
-<<<<<<< HEAD
-const ffmpegPath = "C:/ffmpeg/bin/ffmpeg.exe"; // Replace with the actual path
-=======
-const ffmpegPath = "C:/Program Files/ffmpeg/bin/ffmpeg.exe"; // Replace with the actual path
->>>>>>> c8fa8d2e8bfe8b6c3cb44abccd5d0ff3595feb5a
+const produceVideoFramesToConsumer2 = async () => {
+  const ffmpeg = spawn(ffmpegPath, [
+    "-f", "dshow",
+    "-i", "video=Integrated Webcam",
+    "-f", "rawvideo",
+    "-pix_fmt", "rgb24",
+    "pipe:1",
+  ]);
 
-const videoStream = spawn(ffmpegPath, [
-  "-f", "dshow",
-  "-i", "video=Integrated Camera",
-  "-f", "mpegts",
-  "-codec:v", "mpeg1video",
-  "-s", "640x480",
-  "-b:v", "800k",
-  "-bf", "0",
-  "-muxdelay", "0.001",
-  "-"
-]);
+  const producer = new Kafka.Producer({
+    "metadata.broker.list": "kafka-broker:9092",
+    "security.protocol": "ssl",
+    "ssl.key.location": "service.key",
+    "ssl.certificate.location": "service.cert",
+    "ssl.ca.location": "ca.pem",
+    dr_cb: true
+  });
 
-videoStream.stdout.on("data", (data) => {
-  try {
-    // Produce message to Kafka
-    producer.produce(
-      TOPIC_NAME,
-      null,
-      Buffer.from(data), // Convert data to buffer
-      null,
-      Date.now()
-    );
-    console.log("Sent video data to Kafka.");
-  } catch (err) {
-    console.error("Error sending video data to Kafka:", err);
-  }
-});
+  producer.connect();
 
-<<<<<<< HEAD
-// Handle process errors
-videoStream.on('error', (err) => {
-  console.error('ffmpeg process error:', err);
-=======
-// Handle delivery report callback
-producer.on('delivery-report', function(err, report) {
-  if (err) {
-    console.error('Error producing message:', err);
-  } else {
-    console.log('Message delivered to topic:', report.topic);
-  }
->>>>>>> c8fa8d2e8bfe8b6c3cb44abccd5d0ff3595feb5a
-});
+  ffmpeg.stdout.on("data", async (data) => {
+    try {
+      producer.produce(
+        TOPIC_NAME_CONSUMER_2,
+        null,
+        data,
+        null,
+        Date.now()
+      );
+    } catch (err) {
+      console.error("Error sending video data to Kafka:", err);
+    }
+  });
 
-// Handle process termination
-process.on('SIGINT', () => {
-  producer.disconnect();
-  videoStream.kill();
-  process.exit();
-});
+  // Handle process termination
+  process.on('SIGINT', () => {
+    producer.disconnect();
+    ffmpeg.kill();
+    process.exit();
+  });
+};
 
-// Handle delivery report callback
-producer.on('delivery-report', function(err, report) {
-  if (err) {
-    console.error('Error producing message:', err);
-  } else {
-    console.log('Message delivered to topic:', report.topic);
-  }
-});
+produceVideoFramesToConsumer2();
