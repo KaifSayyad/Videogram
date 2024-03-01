@@ -17,7 +17,11 @@ const producer = new Kafka.Producer({
 producer.connect();
 
 // Specify the full path to the ffmpeg executable
+<<<<<<< HEAD
 const ffmpegPath = "C:/ffmpeg/bin/ffmpeg.exe"; // Replace with the actual path
+=======
+const ffmpegPath = "C:/Program Files/ffmpeg/bin/ffmpeg.exe"; // Replace with the actual path
+>>>>>>> c8fa8d2e8bfe8b6c3cb44abccd5d0ff3595feb5a
 
 const videoStream = spawn(ffmpegPath, [
   "-f", "dshow",
@@ -47,9 +51,19 @@ videoStream.stdout.on("data", (data) => {
   }
 });
 
+<<<<<<< HEAD
 // Handle process errors
 videoStream.on('error', (err) => {
   console.error('ffmpeg process error:', err);
+=======
+// Handle delivery report callback
+producer.on('delivery-report', function(err, report) {
+  if (err) {
+    console.error('Error producing message:', err);
+  } else {
+    console.log('Message delivered to topic:', report.topic);
+  }
+>>>>>>> c8fa8d2e8bfe8b6c3cb44abccd5d0ff3595feb5a
 });
 
 // Handle process termination
