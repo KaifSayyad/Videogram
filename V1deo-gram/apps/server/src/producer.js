@@ -1,5 +1,6 @@
 const Kafka = require("node-rdkafka");
-const fs = require("fs");
+const { spawn } = require("child_process");
+const path = require("path");
 
 const TOPIC_NAME = "demo_topic";
 
@@ -17,42 +18,53 @@ producer.connect();
 const sleep = async (timeInMs) =>
   await new Promise((resolve) => setTimeout(resolve, timeInMs));
 
-const produceMessagesOnSecondIntervals = async () => {
-  // produce 100 messages on 1 second intervals
-  let i = 0;
-  while (i++ < 100) {
+const ffmpegPath = "C:/Program Files/ffmpeg/bin/ffmpeg.exe"; // Replace with the actual path to ffmpeg.exe
+
+const produceVideoOnSecondIntervals = async () => {
+  // produce video frames on 1 second intervals
+  const ffmpeg = spawn(ffmpegPath, [
+    "-f", "dshow",
+    "-i", "video=Integrated Camera",
+    "-f", "rawvideo",
+    "-pix_fmt", "rgb24",
+    "-"
+  ]);
+
+  ffmpeg.stdout.on("data", async (data) => {
     try {
       if (!producer.isConnected()) {
         await sleep(1000);
-        continue;
+        return;
       }
 
-      const filePath = "vid.mp4"; // Replace with the actual file path
-      const fileData = fs.readFileSync(filePath);
       producer.produce(
-        // Topic to send the message to
         TOPIC_NAME,
-        // optionally we can manually specify a partition for the message
-        // this defaults to -1 - which will use librdkafka's default partitioner (consistent random for keyed messages, random for unkeyed messages)
         null,
-        // Message to send. Must be a buffer
-        fileData,
-        // for keyed messages, we also specify the key - note that this field is optional
+        data,
         null,
-        // you can send a timestamp here. If your broker version supports it,
-        // it will get added. Otherwise, we default to 0
         Date.now()
       );
-      console.log(`Message sent: vid.mp4`);
+      console.log(`Sent video frame to Kafka`);
     } catch (err) {
       console.error("A problem occurred when sending our message");
       console.error(err);
     }
+  });
 
-    await sleep(1000);
-  }
+  ffmpeg.stderr.on("data", (data) => {
+    console.error(`ffmpeg stderr: ${data}`);
+  });
 
-  producer.disconnect();
+  ffmpeg.on("close", (code) => {
+    console.log(`ffmpeg process exited with code ${code}`);
+  });
+
+  // Handle process termination
+  process.on('SIGINT', () => {
+    ffmpeg.kill();
+    producer.disconnect();
+    process.exit();
+  });
 };
 
-produceMessagesOnSecondIntervals();
+produceVideoOnSecondIntervals();

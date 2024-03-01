@@ -3,22 +3,25 @@ const { spawn } = require("child_process");
 
 const TOPIC_NAME = "demo_topic";
 
-const stream = new Kafka.createReadStream(
-  {
-    "metadata.broker.list": "kafka-17907454-v1deo-gram.a.aivencloud.com:26681",
-    "group.id": "GROUP_ID",
-    "security.protocol": "ssl",
-    "ssl.key.location": "service.key",
-    "ssl.certificate.location": "service.cert",
-    "ssl.ca.location": "ca.pem",
-  },
-  { "auto.offset.reset": "beginning" },
-  { topics: [TOPIC_NAME] }
-);
+// Kafka producer configuration
+const producer = new Kafka.Producer({
+  "metadata.broker.list": "kafka-17907454-v1deo-gram.a.aivencloud.com:26681",
+  "dr_cb": true, // Enable delivery report callback
+  "security.protocol": "ssl",
+  "ssl.key.location": "service.key",
+  "ssl.certificate.location": "service.cert",
+  "ssl.ca.location": "ca.pem",
+});
 
-const videoStream = spawn("ffmpeg", [
+// Connect the producer to the Kafka cluster
+producer.connect();
+
+// Specify the full path to the ffmpeg executable
+const ffmpegPath = "C:/Program Files/ffmpeg/bin/ffmpeg.exe"; // Replace with the actual path
+
+const videoStream = spawn(ffmpegPath, [
   "-f", "dshow",
-  "-i", "video=Integrated Webcam",
+  "-i", "video=Integrated Camera",
   "-f", "mpegts",
   "-codec:v", "mpeg1video",
   "-s", "640x480",
@@ -30,10 +33,11 @@ const videoStream = spawn("ffmpeg", [
 
 videoStream.stdout.on("data", (data) => {
   try {
-    stream.produce(
+    // Produce message to Kafka
+    producer.produce(
       TOPIC_NAME,
       null,
-      data,
+      Buffer.from(data), // Convert data to buffer
       null,
       Date.now()
     );
@@ -43,12 +47,18 @@ videoStream.stdout.on("data", (data) => {
   }
 });
 
-stream.on("error", (err) => {
-  console.error("Stream error:", err);
+// Handle delivery report callback
+producer.on('delivery-report', function(err, report) {
+  if (err) {
+    console.error('Error producing message:', err);
+  } else {
+    console.log('Message delivered to topic:', report.topic);
+  }
 });
 
 // Handle process termination
 process.on('SIGINT', () => {
+  producer.disconnect();
   videoStream.kill();
   process.exit();
 });
